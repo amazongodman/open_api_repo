@@ -19,7 +19,7 @@ fi
 
 # システムのアップデートとPython環境のセットアップ
 echo "Updating system packages..."
-sudo apt-get update && sudo apt-get upgrade -y
+sudo apt-get update
 sudo apt-get install -y \
     python3-pip \
     python3-venv \
@@ -39,8 +39,8 @@ sudo apt-get install -y nvidia-driver-535 nvidia-cuda-toolkit
 
 # ドライバーの確認
 if ! nvidia-smi &>/dev/null; then
-    echo "NVIDIA driver installation failed. Please reboot and run the script again."
-    exit 1
+    echo "NVIDIA driver installation failed. A reboot is required."
+    echo "Please run 'sudo reboot' after the script finishes."
 fi
 
 # CUDAバージョンの確認
@@ -48,10 +48,8 @@ CUDA_VERSION=$(nvcc --version | grep "release" | awk '{print $5}' | cut -d',' -f
 echo "Detected CUDA Version: $CUDA_VERSION"
 
 # プロジェクトディレクトリの設定
-PROJECT_DIR=~/image-classifier
-echo "Setting up project directory at $PROJECT_DIR"
-mkdir -p $PROJECT_DIR
-cd $PROJECT_DIR
+PROJECT_DIR=$(pwd)
+echo "Setting up project in: $PROJECT_DIR"
 
 # Python仮想環境の作成
 echo "Creating Python virtual environment..."
@@ -68,17 +66,17 @@ pip3 install fastapi uvicorn python-multipart aiofiles python-jose[cryptography]
 echo "Checking PyTorch GPU support..."
 python3 -c "import torch; print('PyTorch version:', torch.__version__); print('CUDA available:', torch.cuda.is_available()); print('CUDA version:', torch.version.cuda)"
 
-# アプリケーションの設定
-echo "Configuring application..."
+# 環境設定ファイルの作成
+echo "Creating environment file..."
 if [ ! -f .env ]; then
-    echo "Creating .env file..."
     echo "SECRET_KEY=$(openssl rand -hex 32)" > .env
     echo "PASSWORD=change_this_password" >> .env
+    chmod 600 .env
 fi
 
 # Nginxの設定
 echo "Configuring Nginx..."
-sudo bash -c 'cat > /etc/nginx/sites-available/image-classifier << EOL
+sudo bash -c "cat > /etc/nginx/sites-available/image-classifier << 'EOL'
 server {
     listen 80;
     server_name _;
@@ -89,9 +87,11 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_connect_timeout 300s;
+        proxy_read_timeout 300s;
     }
 }
-EOL'
+EOL"
 
 sudo ln -sf /etc/nginx/sites-available/image-classifier /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
@@ -99,22 +99,23 @@ sudo systemctl restart nginx
 
 # システムサービスの設定
 echo "Setting up systemd service..."
-sudo bash -c 'cat > /etc/systemd/system/image-classifier.service << EOL
+sudo bash -c "cat > /etc/systemd/system/image-classifier.service << EOL
 [Unit]
 Description=Image Classifier Web Application
 After=network.target
 
 [Service]
 User=ubuntu
-WorkingDirectory=/home/ubuntu/image-classifier
-Environment="PATH=/home/ubuntu/image-classifier/venv/bin"
-ExecStart=/home/ubuntu/image-classifier/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+WorkingDirectory=$PROJECT_DIR
+Environment=\"PATH=$PROJECT_DIR/venv/bin\"
+EnvironmentFile=$PROJECT_DIR/.env
+ExecStart=$PROJECT_DIR/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
-EOL'
+EOL"
 
 sudo systemctl daemon-reload
 sudo systemctl enable image-classifier
@@ -123,8 +124,16 @@ sudo systemctl start image-classifier
 echo "Setup completed at $(date)"
 echo "Please check $log_file for detailed logs"
 
-# システムの状態確認
+# 最終確認
 echo "Final system checks..."
+echo "1. NVIDIA Driver and CUDA:"
 nvidia-smi
-systemctl status nginx
-systemctl status image-classifier
+echo ""
+echo "2. Services status:"
+systemctl status nginx --no-pager
+systemctl status image-classifier --no-pager
+
+echo ""
+echo "Setup complete! Please check the services status above."
+echo "If you see any errors, you may need to reboot the system:"
+echo "sudo reboot"
