@@ -160,7 +160,7 @@ df -h
 main.pyなどを書き換えたら以下で再起動をする  
 sudo systemctl restart image-classifier  
 sudo systemctl restart nginx  
-
+sudo journalctl -u image-classifier -f  
 
 
 ## ログの確認

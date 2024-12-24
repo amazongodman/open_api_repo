@@ -43,7 +43,7 @@ pip install --upgrade pip
 # https://pytorch.org/
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 pip install fastapi uvicorn python-multipart aiofiles python-jose[cryptography] passlib[bcrypt] python-dotenv
-
+pip install boto3
 
 
 # 環境設定ファイルの作成
