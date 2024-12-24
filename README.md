@@ -150,14 +150,10 @@ python3 -m uvicorn main:app --host 0.0.0.0 --port 8000
 ## ディスク容量の確認
 df -h  
 
-## GPU状態の確認
-nvidia-smi  
-nvidia-smi -l 1  # 1秒ごとに更新  
-
-## CUDA情報の確認 
-nvcc --version  
-
 ## サービスの再起動
+
+サービスはctrl+cで停止  
+main.pyなどを書き換えたら以下で再起動をする  
 sudo systemctl restart image-classifier  
 sudo systemctl restart nginx  
 

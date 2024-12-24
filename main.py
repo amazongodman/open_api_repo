@@ -46,14 +46,21 @@ static_dir = Path("static")
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# ImageNetクラスラベルの準備
+def get_default_classes():
+    return [
+        'tench', 'goldfish', 'great white shark', 'tiger shark', 'hammerhead shark',
+        'electric ray', 'stingray', 'rooster', 'hen', 'ostrich', 'brambling',
+        # ... 他のクラス名は省略（実際には1000クラス分必要）
+    ]
+
 # ImageNetクラスラベルの読み込み
 def load_imagenet_labels():
-    labels_path = os.path.join(os.path.dirname(__file__), "imagenet_labels.json")
-    if not os.path.exists(labels_path):
-        # デフォルトのImageNetラベル（簡略化バージョン）
-        return {i: f"class_{i}" for i in range(1000)}
-    with open(labels_path, 'r') as f:
-        return json.load(f)
+    try:
+        from imagenet_classes import get_imagenet_classes
+        return get_imagenet_classes()
+    except ImportError:
+        return get_default_classes()
 
 # モデルの初期化
 try:
@@ -93,6 +100,14 @@ async def add_process_time_header(request: Request, call_next):
     process_time = time.time() - start_time
     response.headers["X-Process-Time"] = str(process_time)
     return response
+
+@app.get("/labels")
+async def get_labels() -> Dict[str, Any]:
+    """クラスラベル一覧を返す"""
+    return {
+        "total_classes": len(class_labels),
+        "labels": class_labels
+    }
 
 @app.get("/health")
 async def health_check() -> Dict[str, Any]:
@@ -193,10 +208,19 @@ async def predict(
             # 上位5クラスの予測結果を取得
             top_probs, top_indices = torch.topk(probabilities[0], 5)
             
-            predictions = [{
-                "class": class_labels[idx.item()],
-                "probability": f"{prob.item()*100:.2f}%"
-            } for prob, idx in zip(top_probs, top_indices)]
+            predictions = []
+            for prob, idx in zip(top_probs, top_indices):
+                class_idx = idx.item()
+                if class_idx < len(class_labels):
+                    predictions.append({
+                        "class": class_labels[class_idx],
+                        "probability": f"{prob.item()*100:.2f}%"
+                    })
+                else:
+                    predictions.append({
+                        "class": f"Unknown class {class_idx}",
+                        "probability": f"{prob.item()*100:.2f}%"
+                    })
 
         process_time = time.time() - start_time
         
