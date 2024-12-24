@@ -109,6 +109,9 @@ cd open_api_repo
 .shの中身を編集  
 S3_BUCKET="your-dataset-bucket-name"  # このバケット名は要変更  
 
+起動後にEC2コンソールから  
+aws s3 ls s3://your-dataset-bucket-name/  
+が通って中身が表示されたらOK  
 
 # 2. セットアップスクリプトに実行権限を付与
 chmod +x setup.sh  
@@ -133,9 +136,11 @@ python3 -c "import torch; print('PyTorch version:', torch.__version__); print('C
 # 5. アプリケーションの状態確認
 sudo systemctl status image-classifier  
 sudo systemctl status nginx  
-
-# 6. ログの確認
 sudo journalctl -u image-classifier -f  
+
+
+
+
 
 
 インスタンスのセキュリティグループのインバウントルールにHTTP、ポート80、マイIPを追加  
@@ -154,6 +159,15 @@ Basic認証の要求が表示される
 パスワードの変更は以下のように行えます  
 
 nano ~/your-repo/.env  
+
+
+
+
+export AWS_DEFAULT_REGION=ap-northeast-1
+echo "AWS_DEFAULT_REGION=ap-northeast-1" >> .env
+sudo systemctl restart image-classifier
+
+
 
 
 
