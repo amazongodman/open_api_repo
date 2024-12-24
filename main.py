@@ -1,11 +1,16 @@
 import os
 import io
+import json
 import logging
+import boto3
+import uuid
+from datetime import datetime
 from typing import Dict, Any
 from pathlib import Path
 import secrets
 import time
 import torch
+from torch import nn
 from torchvision import transforms, models
 from torchvision.models import ResNet50_Weights
 from PIL import Image
@@ -22,21 +27,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-import boto3
-import uuid
-from datetime import datetime
-
-# S3クライアントの初期化
-s3_client = boto3.client('s3')
-S3_BUCKET = os.getenv("S3_BUCKET")
-if not S3_BUCKET:
-    raise RuntimeError("S3_BUCKET environment variable is not set")
-
 # 環境変数の読み込み
 load_dotenv()
 PASSWORD = os.getenv("PASSWORD")
+S3_BUCKET = os.getenv("S3_BUCKET")
+
 if not PASSWORD:
     raise RuntimeError("PASSWORD environment variable is not set")
+if not S3_BUCKET:
+    raise RuntimeError("S3_BUCKET environment variable is not set")
+
+# S3クライアントの初期化
+s3_client = boto3.client('s3')
 
 # CUDA設定とデバイスの選択
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -87,14 +89,6 @@ def verify_password(credentials: HTTPBasicCredentials = Depends(security)):
         )
     return credentials
 
-@app.get("/labels")
-async def get_labels() -> Dict[str, Any]:
-    """クラスラベル一覧を返す"""
-    return {
-        "total_classes": len(class_labels),
-        "labels": class_labels
-    }
-
 @app.get("/health")
 async def health_check() -> Dict[str, Any]:
     """ヘルスチェックエンドポイント"""
@@ -113,6 +107,14 @@ async def health_check() -> Dict[str, Any]:
         "cuda_available": torch.cuda.is_available(),
         "gpu_info": gpu_info,
         "model_loaded": True
+    }
+
+@app.get("/labels")
+async def get_labels() -> Dict[str, Any]:
+    """クラスラベル一覧を返す"""
+    return {
+        "total_classes": len(class_labels),
+        "labels": class_labels
     }
 
 @app.get("/", response_class=HTMLResponse)
@@ -151,7 +153,8 @@ async def read_root(credentials: HTTPBasicCredentials = Depends(verify_password)
                             }}
                         }});
                         const result = await response.json();
-                        
+                        console.log('Received response:', result);  // デバッグ用
+
                         let resultHtml = '<div class="result-container">';
                         
                         // 画像の表示
@@ -182,6 +185,7 @@ async def read_root(credentials: HTTPBasicCredentials = Depends(verify_password)
                         
                         document.getElementById('result').innerHTML = resultHtml;
                     }} catch (error) {{
+                        console.error('Error:', error);  // デバッグ用
                         document.getElementById('result').innerHTML = `<p style="color: red;">エラーが発生しました: ${{error.message}}</p>`;
                     }}
                 }}
@@ -289,7 +293,7 @@ async def predict(
             ContentType='application/json'
         )
 
-        return {
+        response_data = {
             "filename": file.filename,
             "predictions": predictions,
             "process_time": f"{process_time:.3f} seconds",
@@ -298,6 +302,11 @@ async def predict(
             "image_url": image_url,
             "s3_path": s3_key
         }
+
+        # レスポンスの内容をログに出力（デバッグ用）
+        logger.info(f"Sending response: {json.dumps(response_data, indent=2)}")
+        
+        return response_data
         
     except Exception as e:
         logger.error(f"Error processing image: {e}")
