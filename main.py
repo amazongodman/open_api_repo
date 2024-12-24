@@ -5,9 +5,7 @@ from typing import Dict, Any
 from pathlib import Path
 import secrets
 import time
-import json
 import torch
-from torch import nn
 from torchvision import transforms, models
 from torchvision.models import ResNet50_Weights
 from PIL import Image
@@ -46,22 +44,6 @@ static_dir = Path("static")
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# ImageNetクラスラベルの準備
-def get_default_classes():
-    return [
-        'tench', 'goldfish', 'great white shark', 'tiger shark', 'hammerhead shark',
-        'electric ray', 'stingray', 'rooster', 'hen', 'ostrich', 'brambling',
-        # ... 他のクラス名は省略（実際には1000クラス分必要）
-    ]
-
-# ImageNetクラスラベルの読み込み
-def load_imagenet_labels():
-    try:
-        from imagenet_classes import get_imagenet_classes
-        return get_imagenet_classes()
-    except ImportError:
-        return get_default_classes()
-
 # モデルの初期化
 try:
     logger.info("Loading model...")
@@ -94,14 +76,6 @@ def verify_password(credentials: HTTPBasicCredentials = Depends(security)):
             headers={"WWW-Authenticate": "Basic"},
         )
     return credentials
-
-@app.middleware("http")
-async def add_process_time_header(request: Request, call_next):
-    start_time = time.time()
-    response = await call_next(request)
-    process_time = time.time() - start_time
-    response.headers["X-Process-Time"] = str(process_time)
-    return response
 
 @app.get("/labels")
 async def get_labels() -> Dict[str, Any]:
@@ -143,27 +117,45 @@ async def read_root(credentials: HTTPBasicCredentials = Depends(verify_password)
                 body {{ font-family: Arial, sans-serif; margin: 40px; }}
                 .info {{ color: #666; margin-bottom: 20px; }}
                 .upload-form {{ margin-top: 20px; }}
-                .result {{ margin-top: 20px; padding: 10px; background-color: #f5f5f5; }}
-                .device-info {{ background-color: #f0f0f0; padding: 10px; margin-bottom: 20px; }}
+                .result {{ margin-top: 20px; padding: 15px; background-color: #f5f5f5; border-radius: 5px; }}
+                .device-info {{ background-color: #f0f0f0; padding: 10px; margin-bottom: 20px; border-radius: 5px; }}
+                .prediction {{ margin: 10px 0; padding: 10px; background-color: white; border-radius: 3px; }}
+                .prediction-rank-1 {{ border-left: 4px solid #4CAF50; }}
+                .prediction-rank-2 {{ border-left: 4px solid #2196F3; }}
+                .prediction-rank-3 {{ border-left: 4px solid #9C27B0; }}
             </style>
             <script>
                 async function submitForm(event) {{
                     event.preventDefault();
                     const formData = new FormData(event.target);
-                    const response = await fetch('/predict', {{
-                        method: 'POST',
-                        body: formData,
-                        headers: {{
-                            'Authorization': 'Basic ' + btoa(':' + '{PASSWORD}')
+                    try {{
+                        const response = await fetch('/predict', {{
+                            method: 'POST',
+                            body: formData,
+                            headers: {{
+                                'Authorization': 'Basic ' + btoa(':' + '{PASSWORD}')
+                            }}
+                        }});
+                        const result = await response.json();
+                        
+                        let predictionsHtml = '<h3>分類結果:</h3>';
+                        result.predictions.forEach((pred, index) => {{
+                            predictionsHtml += `
+                                <div class="prediction prediction-rank-${{index + 1}}">
+                                    <strong>#${{index + 1}}:</strong> ${{pred.class}}<br>
+                                    <span>確信度: ${{pred.probability}}</span>
+                                </div>`;
+                        }});
+                        
+                        predictionsHtml += `<p>処理時間: ${{result.process_time}}</p>`;
+                        if (result.gpu_memory) {{
+                            predictionsHtml += `<p>GPU メモリ使用量: ${{result.gpu_memory.allocated}}</p>`;
                         }}
-                    }});
-                    const result = await response.json();
-                    document.getElementById('result').innerHTML = `
-                        <h3>分類結果:</h3>
-                        <p>予測クラス: ${{result.predicted_class}}</p>
-                        <p>確信度: ${{result.confidence}}</p>
-                        <p>処理時間: ${{result.process_time}}</p>
-                    `;
+                        
+                        document.getElementById('result').innerHTML = predictionsHtml;
+                    }} catch (error) {{
+                        document.getElementById('result').innerHTML = `<p style="color: red;">エラーが発生しました: ${{error.message}}</p>`;
+                    }}
                 }}
             </script>
         </head>
@@ -203,26 +195,19 @@ async def predict(
         image_tensor = transform(image).unsqueeze(0).to(DEVICE)
 
         # 予測実行
-        with torch.no_grad(), torch.cuda.amp.autocast(enabled=DEVICE.type=='cuda'):
+        with torch.no_grad(), torch.amp.autocast(device_type=DEVICE.type):
             outputs = model(image_tensor)
             probabilities = torch.nn.functional.softmax(outputs, dim=1)
             
-            # 上位5クラスの予測結果を取得
-            top_probs, top_indices = torch.topk(probabilities[0], 5)
+            # 上位3クラスの予測結果を取得
+            top_probs, top_indices = torch.topk(probabilities[0], 3)
             
             predictions = []
             for prob, idx in zip(top_probs, top_indices):
-                class_idx = idx.item()
-                if class_idx < len(class_labels):
-                    predictions.append({
-                        "class": class_labels[class_idx],
-                        "probability": f"{prob.item()*100:.2f}%"
-                    })
-                else:
-                    predictions.append({
-                        "class": f"Unknown class {class_idx}",
-                        "probability": f"{prob.item()*100:.2f}%"
-                    })
+                predictions.append({
+                    "class": class_labels[idx.item()],
+                    "probability": f"{prob.item()*100:.2f}%"
+                })
 
         process_time = time.time() - start_time
         
@@ -237,7 +222,6 @@ async def predict(
         return {
             "filename": file.filename,
             "predictions": predictions,
-            "top_prediction": predictions[0],
             "process_time": f"{process_time:.3f} seconds",
             "device_used": DEVICE.type,
             "gpu_memory": gpu_memory_info if DEVICE.type == 'cuda' else None
@@ -246,18 +230,6 @@ async def predict(
     except Exception as e:
         logger.error(f"Error processing image: {e}")
         raise HTTPException(status_code=400, detail=str(e))
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    """グローバルな例外ハンドラ"""
-    logger.error(f"Global error: {exc}")
-    return JSONResponse(
-        status_code=500,
-        content={
-            "detail": "Internal server error occurred",
-            "type": str(type(exc).__name__)
-        }
-    )
 
 if __name__ == "__main__":
     import uvicorn

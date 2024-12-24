@@ -135,7 +135,11 @@ wget https://raw.githubusercontent.com/pytorch/hub/master/images/dog.jpg
 sudo systemctl restart image-classifier  
 
 ## 5.1 サービスが起動しない場合
+
 sudo journalctl -u image-classifier -f  
+
+
+
 cat ~/your-repo/.env  
 cd ~/your-repo  
 source venv/bin/activate  
