@@ -163,22 +163,10 @@ nano ~/your-repo/.env
 
 
 
-export AWS_DEFAULT_REGION=ap-northeast-1
-echo "AWS_DEFAULT_REGION=ap-northeast-1" >> .env
-sudo systemctl restart image-classifier
-
-
-
-
-
-
 # 推論
 
 画像ダウンロード  
 wget https://raw.githubusercontent.com/pytorch/hub/master/images/dog.jpg  
-
-
-
 
 
 
