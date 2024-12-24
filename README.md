@@ -14,6 +14,15 @@ AMI: Ubuntu Server 22.04 LTS
 EC2を起動、PuTTYでログインできるようにしておくこと  
 
 
+
+# 確認
+nvidia-smi  # GPUの確認  
+nvcc -V     # CUDAバージョンの確認  
+
+
+
+
+
 # repo構成
 
 your-repo/  
@@ -27,7 +36,7 @@ cd open_api_repo
 
 # setup.shの修正
 
-S3_BUCKET="your-bucket-name"  # このバケット名は要変更
+S3_BUCKET="your-dataset-bucket-name"  # このバケット名は要変更
 
 
 # 2. セットアップスクリプトに実行権限を付与
@@ -39,6 +48,11 @@ chmod +x setup.sh
 # 4. インストール後の確認
 nvidia-smi  # GPUの確認  
 nvcc -V     # CUDAバージョンの確認  
+
+
+
+source venv/bin/activate
+
 
 python3 -c "import torch; print(torch.cuda.is_available())"  # PyTorch CUDA確認  
 python3 -c "import torch; print('PyTorch version:', torch.__version__); print('CUDA available:', torch.cuda.is_available()); print('CUDA version:', torch.version.cuda)"  
