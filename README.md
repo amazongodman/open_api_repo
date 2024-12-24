@@ -36,7 +36,8 @@ cd open_api_repo
 
 # setup.shの修正
 
-S3_BUCKET="your-dataset-bucket-name"  # このバケット名は要変更
+.shの中身を編集  
+S3_BUCKET="your-dataset-bucket-name"  # このバケット名は要変更  
 
 
 # 2. セットアップスクリプトに実行権限を付与
@@ -51,7 +52,9 @@ nvcc -V     # CUDAバージョンの確認
 
 
 
-source venv/bin/activate
+source venv/bin/activate  
+
+pip list  # torchがはいっているはず
 
 
 python3 -c "import torch; print(torch.cuda.is_available())"  # PyTorch CUDA確認  
@@ -64,6 +67,9 @@ sudo systemctl status nginx
 # 6. ログの確認
 sudo journalctl -u image-classifier -f  
 
+
+インスタンスのセキュリティグループのインバウントルールにHTTP、ポート80、マイIPを追加  
+
 ブラウザで http://your-ec2-public-ip にアクセス  
 Basic認証の要求が表示される  
 
@@ -72,20 +78,29 @@ Basic認証の要求が表示される
 - ユーザー名: 何を入力しても構いません（空欄でもOK）  
 - パスワード: .envファイルに設定したPASSWORDの値  
 
-change_this_password  
+デフォは「change_this_password」にした  
 
+セキュリティのため、本番環境では必ずデフォルトパスワードを変更してください。  
+パスワードの変更は以下のように行えます  
 
-
-### セキュリティのため、本番環境では必ずデフォルトパスワードを変更してください。パスワードの変更は以下のように行えます：
-
-
-## .envファイルのPASSWORDを変更
 nano ~/your-repo/.env  
+
+
+
+
+# 推論
+
+画像ダウンロード  
+wget https://raw.githubusercontent.com/pytorch/hub/master/images/dog.jpg  
+
+
+
+
+
+
 
 ## サービスを再起動
 sudo systemctl restart image-classifier  
-
-
 
 ## 5.1 サービスが起動しない場合
 sudo journalctl -u image-classifier -f  

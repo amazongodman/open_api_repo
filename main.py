@@ -5,6 +5,7 @@ from typing import Dict, Any
 from pathlib import Path
 import secrets
 import time
+import json
 import torch
 from torch import nn
 from torchvision import transforms, models
@@ -35,7 +36,6 @@ logger.info(f"Using device: {DEVICE}")
 if DEVICE.type == 'cuda':
     logger.info(f"GPU: {torch.cuda.get_device_name(0)}")
     logger.info(f"CUDA Version: {torch.version.cuda}")
-    # GPU メモリ情報
     logger.info(f"Total GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**2:.1f} MB")
 
 app = FastAPI(title="Image Classification API")
@@ -46,12 +46,23 @@ static_dir = Path("static")
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# ImageNetクラスラベルの読み込み
+def load_imagenet_labels():
+    labels_path = os.path.join(os.path.dirname(__file__), "imagenet_labels.json")
+    if not os.path.exists(labels_path):
+        # デフォルトのImageNetラベル（簡略化バージョン）
+        return {i: f"class_{i}" for i in range(1000)}
+    with open(labels_path, 'r') as f:
+        return json.load(f)
+
 # モデルの初期化
 try:
     logger.info("Loading model...")
-    model = models.resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
+    weights = ResNet50_Weights.IMAGENET1K_V2
+    model = models.resnet50(weights=weights)
     model.to(DEVICE)
     model.eval()
+    class_labels = load_imagenet_labels()
     logger.info("Model loaded successfully")
 except Exception as e:
     logger.error(f"Error loading model: {e}")
@@ -64,14 +75,6 @@ transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
-
-# ImageNetのクラスラベル（上位20クラス）
-class_labels = [
-    'tench', 'goldfish', 'great_white_shark', 'tiger_shark', 'hammerhead',
-    'electric_ray', 'stingray', 'cock', 'hen', 'ostrich', 'brambling',
-    'goldfinch', 'house_finch', 'junco', 'indigo_bunting', 'robin',
-    'bulbul', 'jay', 'magpie', 'chickadee'
-]
 
 def verify_password(credentials: HTTPBasicCredentials = Depends(security)):
     correct_password = secrets.compare_digest(credentials.password, PASSWORD)
@@ -100,7 +103,7 @@ async def health_check() -> Dict[str, Any]:
             "gpu_name": torch.cuda.get_device_name(0),
             "cuda_version": torch.version.cuda,
             "memory_allocated": f"{torch.cuda.memory_allocated(0) / 1024**2:.1f} MB",
-            "memory_cached": f"{torch.cuda.memory_reserved(0) / 1024**2:.1f} MB"
+            "memory_reserved": f"{torch.cuda.memory_reserved(0) / 1024**2:.1f} MB"
         }
 
     return {
@@ -123,16 +126,36 @@ async def read_root(credentials: HTTPBasicCredentials = Depends(verify_password)
                 body {{ font-family: Arial, sans-serif; margin: 40px; }}
                 .info {{ color: #666; margin-bottom: 20px; }}
                 .upload-form {{ margin-top: 20px; }}
-                .result {{ margin-top: 20px; }}
+                .result {{ margin-top: 20px; padding: 10px; background-color: #f5f5f5; }}
                 .device-info {{ background-color: #f0f0f0; padding: 10px; margin-bottom: 20px; }}
             </style>
+            <script>
+                async function submitForm(event) {{
+                    event.preventDefault();
+                    const formData = new FormData(event.target);
+                    const response = await fetch('/predict', {{
+                        method: 'POST',
+                        body: formData,
+                        headers: {{
+                            'Authorization': 'Basic ' + btoa(':' + '{PASSWORD}')
+                        }}
+                    }});
+                    const result = await response.json();
+                    document.getElementById('result').innerHTML = `
+                        <h3>分類結果:</h3>
+                        <p>予測クラス: ${{result.predicted_class}}</p>
+                        <p>確信度: ${{result.confidence}}</p>
+                        <p>処理時間: ${{result.process_time}}</p>
+                    `;
+                }}
+            </script>
         </head>
         <body>
             <h1>画像分類アプリ</h1>
             <div class="device-info">
                 <p>実行環境: {device_info}</p>
             </div>
-            <form action="/predict" method="post" enctype="multipart/form-data" class="upload-form">
+            <form onsubmit="submitForm(event)" class="upload-form" enctype="multipart/form-data">
                 <input type="file" name="file" accept="image/*" required>
                 <input type="submit" value="分類する">
             </form>
@@ -166,12 +189,15 @@ async def predict(
         with torch.no_grad(), torch.cuda.amp.autocast(enabled=DEVICE.type=='cuda'):
             outputs = model(image_tensor)
             probabilities = torch.nn.functional.softmax(outputs, dim=1)
-            _, predicted = outputs.max(1)
             
-            # 確率の取得
-            probability = probabilities[0][predicted].item() * 100
+            # 上位5クラスの予測結果を取得
+            top_probs, top_indices = torch.topk(probabilities[0], 5)
+            
+            predictions = [{
+                "class": class_labels[idx.item()],
+                "probability": f"{prob.item()*100:.2f}%"
+            } for prob, idx in zip(top_probs, top_indices)]
 
-        # 処理時間の計算
         process_time = time.time() - start_time
         
         # GPUメモリ使用状況の取得（GPUモードの場合）
@@ -182,14 +208,12 @@ async def predict(
                 "cached": f"{torch.cuda.memory_reserved(0) / 1024**2:.1f} MB"
             }
 
-        predicted_class = class_labels[predicted.item()]
-        
         return {
             "filename": file.filename,
-            "predicted_class": predicted_class,
-            "confidence": f"{probability:.2f}%",
-            "device_used": DEVICE.type,
+            "predictions": predictions,
+            "top_prediction": predictions[0],
             "process_time": f"{process_time:.3f} seconds",
+            "device_used": DEVICE.type,
             "gpu_memory": gpu_memory_info if DEVICE.type == 'cuda' else None
         }
         

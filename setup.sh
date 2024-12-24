@@ -26,9 +26,14 @@ sudo chown ubuntu:ubuntu $S3_MOUNT_POINT
 # IMDSv2のトークン取得とリージョンの設定
 TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
 REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region)
-
 # fstabにS3マウント設定を追加
 echo "$S3_BUCKET $S3_MOUNT_POINT fuse.s3fs _netdev,allow_other,use_path_request_style,iam_role=auto,url=https://s3-${REGION}.amazonaws.com 0 0" | sudo tee -a /etc/fstab
+
+# もしくは
+# AWS_REGION="ap-northeast-1"
+# echo "$S3_BUCKET $S3_MOUNT_POINT fuse.s3fs _netdev,allow_other,use_path_request_style,iam_role=auto,endpoint=${AWS_REGION} 0 0" | sudo tee -a /etc/fstab
+
+# 確認
 sudo mount -a
 
 # 仮想環境の作成とパッケージのインストール
