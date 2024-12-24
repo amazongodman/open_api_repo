@@ -156,19 +156,11 @@ Basic認証の要求が表示される
 デフォは「change_this_password」にした  
 
 セキュリティのため、本番環境では必ずデフォルトパスワードを変更してください。  
-パスワードの変更は以下のように行えます  
-
-nano ~/your-repo/.env  
-
-
-
 
 # 推論
 
 画像ダウンロード  
 wget https://raw.githubusercontent.com/pytorch/hub/master/images/dog.jpg  
-
-
 
 
 ## サービスを再起動
