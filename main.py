@@ -1,16 +1,11 @@
 import os
 import io
-import json
 import logging
-import boto3
-import uuid
-from datetime import datetime
 from typing import Dict, Any
 from pathlib import Path
 import secrets
 import time
 import torch
-from torch import nn
 from torchvision import transforms, models
 from torchvision.models import ResNet50_Weights
 from PIL import Image
@@ -27,18 +22,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# 環境変数の読み込み
-load_dotenv()
-PASSWORD = os.getenv("PASSWORD")
-S3_BUCKET = os.getenv("S3_BUCKET")
-
-if not PASSWORD:
-    raise RuntimeError("PASSWORD environment variable is not set")
-if not S3_BUCKET:
-    raise RuntimeError("S3_BUCKET environment variable is not set")
+import boto3
+import uuid
+from datetime import datetime
 
 # S3クライアントの初期化
 s3_client = boto3.client('s3')
+S3_BUCKET = os.getenv("S3_BUCKET")
+if not S3_BUCKET:
+    raise RuntimeError("S3_BUCKET environment variable is not set")
+
+# 環境変数の読み込み
+load_dotenv()
+PASSWORD = os.getenv("PASSWORD")
+if not PASSWORD:
+    raise RuntimeError("PASSWORD environment variable is not set")
 
 # CUDA設定とデバイスの選択
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -89,6 +87,14 @@ def verify_password(credentials: HTTPBasicCredentials = Depends(security)):
         )
     return credentials
 
+@app.get("/labels")
+async def get_labels() -> Dict[str, Any]:
+    """クラスラベル一覧を返す"""
+    return {
+        "total_classes": len(class_labels),
+        "labels": class_labels
+    }
+
 @app.get("/health")
 async def health_check() -> Dict[str, Any]:
     """ヘルスチェックエンドポイント"""
@@ -107,14 +113,6 @@ async def health_check() -> Dict[str, Any]:
         "cuda_available": torch.cuda.is_available(),
         "gpu_info": gpu_info,
         "model_loaded": True
-    }
-
-@app.get("/labels")
-async def get_labels() -> Dict[str, Any]:
-    """クラスラベル一覧を返す"""
-    return {
-        "total_classes": len(class_labels),
-        "labels": class_labels
     }
 
 @app.get("/", response_class=HTMLResponse)
@@ -160,7 +158,7 @@ async def read_root(credentials: HTTPBasicCredentials = Depends(verify_password)
                         resultHtml += `
                             <div class="image-container">
                                 <h3>アップロードされた画像:</h3>
-                                <img src="${result.image_url}" alt="Uploaded image">
+                                <img src="${{result.image_url}}" alt="Uploaded image">
                             </div>
                             <div class="predictions-container">
                                 <h3>分類結果:</h3>`;

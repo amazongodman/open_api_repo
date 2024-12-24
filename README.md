@@ -15,6 +15,44 @@ EC2を起動、PuTTYでログインできるようにしておくこと
 
 
 
+
+# EC2インスタンスにIAMロールを設定
+
+
+EC2 → インスタンス → 該当のインスタンスを選択  
+
+アクション → セキュリティ → IAMロールを変更  
+
+ロールを作成  
+信頼されたエンティティタイプで「AWS のサービス」を選択  
+ユースケースで「EC2」を選択  
+許可ポリシーで「AmazonS3FullAccess」  
+
+
+アクション → セキュリティ → IAMロールを変更  
+
+
+```
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject",
+                "s3:GetObject",
+                "s3:ListBucket"
+            ],
+            "Resource": [
+                "arn:aws:s3:::your-bucket-name/*",
+                "arn:aws:s3:::your-bucket-name"
+            ]
+        }
+    ]
+}
+```
+
+
 # 確認
 nvidia-smi  # GPUの確認  
 
@@ -132,29 +170,6 @@ wget https://raw.githubusercontent.com/pytorch/hub/master/images/dog.jpg
 
 
 ## サービスを再起動
-sudo systemctl restart image-classifier  
-
-## 5.1 サービスが起動しない場合
-
-sudo journalctl -u image-classifier -f  
-
-
-
-cat ~/your-repo/.env  
-cd ~/your-repo  
-source venv/bin/activate  
-python3 -m uvicorn main:app --host 0.0.0.0 --port 8000  
-
-
-
-# トラブルシューティング用コマンド
-
-
-
-## ディスク容量の確認
-df -h  
-
-## サービスの再起動
 
 サービスはctrl+cで停止  
 main.pyなどを書き換えたら以下で再起動をする  
@@ -162,7 +177,12 @@ sudo systemctl restart image-classifier
 sudo systemctl restart nginx  
 sudo journalctl -u image-classifier -f  
 
+pythonの仮想環境もはずれたらなこれ  
+source venv/bin/activate  
 
-## ログの確認
-tail -f /var/log/setup_script.log  
-sudo journalctl -u image-classifier -f  
+再起動  
+sudo reboot  
+
+## ディスク容量の確認
+df -h  
+
