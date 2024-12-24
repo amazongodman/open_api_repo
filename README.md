@@ -163,6 +163,13 @@ Basic認証の要求が表示される
 wget https://raw.githubusercontent.com/pytorch/hub/master/images/dog.jpg  
 
 
+
+![image](https://github.com/user-attachments/assets/34750786-688a-48eb-8a8f-c92b1a33364d)
+
+
+
+
+
 ## サービスを再起動
 
 サービスはctrl+cで停止  
