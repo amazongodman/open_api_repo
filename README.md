@@ -25,6 +25,11 @@ your-repo/
 git clone https://github.com/YOUR_USERNAME/open_api_repo.git  
 cd open_api_repo  
 
+# setup.shの修正
+
+S3_BUCKET="your-bucket-name"  # このバケット名は要変更
+
+
 # 2. セットアップスクリプトに実行権限を付与
 chmod +x setup.sh  
 
