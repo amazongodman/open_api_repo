@@ -69,7 +69,9 @@ try:
     model = models.resnet50(weights=weights)
     model.to(DEVICE)
     model.eval()
-    class_labels = load_imagenet_labels()
+    # ImageNet1Kクラスのラベルを取得
+    class_labels = weights.meta["categories"]
+    logger.info(f"Loaded {len(class_labels)} class labels")
     logger.info("Model loaded successfully")
 except Exception as e:
     logger.error(f"Error loading model: {e}")

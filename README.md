@@ -157,6 +157,8 @@ main.pyなどを書き換えたら以下で再起動をする
 sudo systemctl restart image-classifier  
 sudo systemctl restart nginx  
 
+
+
 ## ログの確認
 tail -f /var/log/setup_script.log  
 sudo journalctl -u image-classifier -f  
